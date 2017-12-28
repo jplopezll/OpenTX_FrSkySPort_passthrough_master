@@ -39,3 +39,13 @@ I am using a Pixhawk clone v2.4.8 with uBlock GPS module attached linked to a Fr
 To connect the serial 4 to the R-XSR you need a TTL-Serial inverter adaptor. I have ordered one based on MAX2332, but I am doing the testing with a breadboard, two optocouplers, some resistors and a diode.
 
 You have a nice picture on the required adaptor on this thread <https://github.com/athertop/MavLink_FrSkySPort/issues/11>. Please note the diode that you need to place from TX comming from serial 4 to the S.Port on the R-XSR to block current from the S.Port to the TX pin.
+
+In case anybody would be interested, I was able to program one arduino nano to work as a TTL-Serial inverter-converter. You only need the arduino and a diode. I added a resistor to avoid problems overloading input and output pins. Open an issue if anybody wants the code.
+
+## Sniffer also available
+
+If you want to know what is your radio getting from the passthrough, you can use the script called spsnif.lua.
+
+It will store data received in /SCRIPTS/TELEMETRY/sportlog.txt in csv format for later on analysis.
+
+I would recommend to disable all other telemetry screens and configure spsnif as the only script to be run. It displays only a few numbers and should be able to capture most (if not all) of the data entering the radio.
