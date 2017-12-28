@@ -11,15 +11,25 @@ Most of the data on the display is self explanatory, as you will see in the scre
 ![alt text](https://github.com/jplopezll/OpenTX_FrSkySPort_passthrough_0.0.1-dev/blob/master/images/layoutv001.png "Telemetry screen layout.")
 
 Sections currently implemented and working:
+
 A. Flight Mode, UAV battery voltage, TX battery voltage, timer1 info (mine counts from first thrust).
+
 B. Ground speed in Km/h.
+
 C. GPS altitude.
+
 D. Messages received and severity.
+
 E. Some gauges: RSSI, UAV battery status and current, TX battery remaining (I am using the 6xNiMH battery pack).
+
 F. GPS status and number of satellites.
+
 G. Angle from home launch (this is still to be checked).
+
 H. Distance from home launch (horizontal and vertical).
+
 I. Status flags: armed, battery FS, landed, EKF FS. Also info on UAV battery voltage and capacity to FS trigger.
+
 J. For debugging meanwhile developing: three values on how many 10ms tics the radio is using to get passthrough queue data, drawing and total script execution.
 
 ## My setup
