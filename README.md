@@ -49,7 +49,7 @@ It will store data received in /SCRIPTS/TELEMETRY/sportlog.txt in csv format for
 
 I would recommend to disable all other telemetry screens and configure spsnif as the only script to be run. It displays only a few numbers and should be able to capture most (if not all) of the data entering the radio.
 
-## Sniffer available
+## Telemetry rates verification
 
 And if you want to check the telemetry rates, you can use the scritp "sprate.lua". It will show you the number of packets of each 0x500x received every 10 seconds.
 
