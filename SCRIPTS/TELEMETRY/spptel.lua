@@ -33,10 +33,29 @@ local queueTime=0       -- Keep track of queue process time used
 local totalTime=0       -- Keep track of total run time used
 local screenCleared=0   -- Track if lcd needs full wiping
 local lastUpdtTelem=0     -- Last moment normal telemetry < 0x5000 was updated
-local timeToTelemUpdt=200  -- Minimum redraw time (multiples of 10ms)
+local timeToTelemUpdt=1000  -- Minimum redraw time (multiples of 10ms)
 local drawPrio0=1       -- Inmediate redraw
-local drawPrio1=2       -- Medium priority
-local drawPrio2=4       -- Low priority
+local drawPrio1=4       -- Medium priority
+local drawPrio2=8       -- Low priority
+local drawPrio3=16       -- Minimum priority
+
+
+-- Implementation of messages queue (up t0 10 will be recorded, scroll with + a - keys)
+local msgsDisplay=0         -- Message to be displayed
+local msgsRcvdPos=0         -- Index to position of the last messaged received
+local msgsChunksMax=9       -- Maximum number of 4xchunks to be stored
+local msgsChunksIndex=0     -- Index to current chunk beeing received
+local msgsRcvd={}       -- FIFO bBuffer with the last 10 messages received from S.Port
+  msgsRcvd[0]=""
+  msgsRcvd[1]=""
+  msgsRcvd[2]=""
+  msgsRcvd[3]=""
+  msgsRcvd[4]=""
+  msgsRcvd[5]=""
+  msgsRcvd[6]=""
+  msgsRcvd[7]=""
+  msgsRcvd[8]=""
+  msgsRcvd[9]=""
 
 local drawSection={}     -- Track what sections to redraw
   drawSection[0]=0
@@ -221,113 +240,72 @@ local function drawAlt( altitude )
 end
 
 
-local function drawArtificialHorizon(roll, pitch)
-  local pitchOffset = pitch*boxH/math.pi
-  local oriRad = roll
-  -- Simplify Angle
-  roll = (roll % (2*math.pi)) 
-  
-  if (roll>3*math.pi/2) then
-    roll = roll - 2*math.pi
-  elseif (roll>math.pi/2) then
-    roll=roll-math.pi
-  elseif (roll<-3*math.pi/2) then
-    roll=roll+2*math.pi
-  elseif (roll<-math.pi/2) then
-    roll=roll+math.pi
-  end
-    
-  pitch = (pitch % (2*math.pi))
-  pitch = -pitch          --- Invert angle for horizon
-  
-  if (pitch>3*math.pi/2) then
-    pitch = pitch - 2*math.pi
-  elseif (pitch>math.pi/2) then
-    pitch=pitch-math.pi
-  elseif (pitch<-3*math.pi/2) then
-    pitch=pitch+2*math.pi
-  elseif (pitch<-math.pi/2) then
-    pitch=pitch+math.pi
-  end
-    
-  local pitchOffset = pitch*boxH/math.pi
-    
-  if (math.abs(roll)==math.pi/2) then
-    P1X = 0
-    P1Y = -boxH/2
-    P2X = 0
-    P2Y = boxH/2
-  else
-    local absRadians=math.abs(roll)
-    if(roll>0) then
-      -- P1 Calculations
-      P1X = -boxW/2
-      P1Y = math.tan(absRadians)*P1X + pitchOffset
-    
-      if (P1Y<-boxH/2) then
-        -- Recalculate P1:
-        P1Y = -boxH/2
-        P1X = (P1Y - pitchOffset)/math.tan(absRadians)
-      end
-      
-      -- P2 Calculations
-      P2X = boxW/2
-      P2Y = math.tan(absRadians)*P2X + pitchOffset
-      
-      if (P2Y>boxH/2) then
-        -- Recalculate P1:
-        P2Y = boxH/2
-        P2X = (P2Y - pitchOffset)/math.tan(absRadians)
-      end
-      
-      lcd.drawLine( P1X+boxOffX,  -P1Y+boxOffY,  P2X+boxOffX,  -P2Y+boxOffY, SOLID, 0 )
-    else -- roll<0
-      -- P1 Calculations
-      P1X = -boxW/2
-      P1Y = math.tan(-absRadians)*P1X + pitchOffset
-    
-      if (P1Y>boxH/2) then
-        -- Recalculate P1:
-        P1Y = boxH/2
-        P1X = (P1Y - pitchOffset)/math.tan(-absRadians)
-      end
-      
-      -- P2 Calculations
-      P2X = boxW/2
-      P2Y = math.tan(-absRadians)*P2X + pitchOffset
-      
-      if (P2Y<-boxH/2) then
-        -- Recalculate P1:
-        P2Y = -boxH/2
-        P2X = (P2Y - pitchOffset)/math.tan(-absRadians)
-      end
-      
-      lcd.drawLine( P1X+boxOffX,  -P1Y+boxOffY,  P2X+boxOffX,  -P2Y+boxOffY, SOLID, 0 )
-      
+local origX, origY, endX, endY = 19,7,72,49  -- This will work as a rectangular widget
+local centerX=math.floor((endX-origX)/2 + 0.5 + origX)
+local centerY=math.floor((endY-origY)/2 + 0.5 + origY)
+
+local function drawHorizon()
+  -- Erase the area
+  lcd.drawFilledRectangle(origX,origY,endX-origX+1,endY-origY+1,ERASE)
+
+  -- Draw a box (for testing)
+  --lcd.drawRectangle(origX,origY,endX-origX+1,endY-origY+1, GREY(9))
+  lcd.drawLine(origX,centerY,endX,centerY,DOTTED,FORCE)
+
+  local pitch = Pitch
+  local roll = Roll
+
+  -- Horizon line drawing
+  -- In Pixhawk:
+  --  pitch range is +90 to -90: or in between 270 and 90
+  --  roll range is +180 to -180: or 0 to 360.
+  --  if pitch goes furter, then roll increases by 180 to indicate facing down
+
+  local tanRoll, sinPitch
+  local pitchOffsetY
+  local inverseYaxis = 0
+
+  local YSpanHalf = (endY-origY)/2 - 1
+  local pitchRatio = YSpanHalf / 90     -- Divide by the angle of half the field of view desired. 90 for 180 degrees.
+
+  local attGnd = FORCE + GREY(10)   -- Style of the ground part
+
+  --dPitch_1 = pitch % 180
+  --if dPitch_1 > 90 then dPitch_1 = 180 - dPitch_1 end
+
+  --cosRoll = math.cos(math.rad(roll == 90 and 89.99 or (roll == 270 and 269.99 or roll)))  -- To avoid zero division
+  sinPitch = math.sin(math.rad(pitch == 0 and 0.01 or (pitch == 180 and 179.99 or pitch)))  -- To avoid zero division
+  pitchOffsetY=YSpanHalf*sinPitch
+
+  if roll>90 and roll <270 then inverseYaxis=1 end
+
+  -- Fill of the "land" side drawing vertical lines
+  tanRoll = math.tan(math.rad(roll == 90 and 89.99 or (roll == 270 and 269.99 or roll)))
+  for X1 = origX, endX, 1 do  -- Only one X coordinate, all are vertical lines
+    local YOffset = (centerX-X1) * tanRoll
+    Y1 = math.floor(YOffset + pitchOffsetY + 0.5)
+    if Y1 > YSpanHalf then
+      Y1 = YSpanHalf
+    elseif Y1 < -YSpanHalf then
+      Y1 = -YSpanHalf
     end
+
+    if inverseYaxis == 0  then
+    Y2 = YSpanHalf
+      lcd.drawLine(X1, centerY + Y1, X1, centerY + Y2 + 1, SOLID, attGnd)
+   else
+    Y2= -YSpanHalf
+      lcd.drawLine(X1, centerY + Y2, X1, centerY + Y1 , SOLID, attGnd)
+   end
+
   end
 
-  -- Draw pitch and roll numbers in degrees
-  lcd.drawNumber( boxOffX-6, boxOffY-22, Pitch, SMLSIZE)
-  lcd.drawPixmap(lcd.getLastPos(), boxOffY-22,"/SCRIPTS/BMP/deg.bmp")
-  lcd.drawNumber( boxOffX-28, boxOffY-10, Roll, SMLSIZE)
-  lcd.drawPixmap(lcd.getLastPos(),boxOffY-10,"/SCRIPTS/BMP/deg.bmp")
 
-  local crossW = 15
-  local crossH = 5
-  local crossV = 4
-
-  -- Draw center align cross
-  lcd.drawPoint(boxOffX, boxOffY)
-  lcd.drawLine(boxOffX-crossW/2, boxOffY, math.floor(boxOffX-crossV)-1, boxOffY, SOLID, FORCE )
-  lcd.drawLine(math.floor(boxOffX-crossV), boxOffY, boxOffX, boxOffY+crossV, SOLID, FORCE )
-  lcd.drawLine(boxOffX, boxOffY+crossV, math.floor(boxOffX+crossV), boxOffY, SOLID, FORCE )
-  lcd.drawLine(boxOffX+crossW/2, boxOffY, math.floor(boxOffX+crossV)+1, boxOffY, SOLID, FORCE )
-  
-  -- Draw horizonal dotted lines
-  lcd.drawLine(boxOffX-boxW/2, boxOffY, boxOffX-crossW/2, boxOffY, DOTTED, FORCE)
-  lcd.drawLine(boxOffX+boxW/2, boxOffY, boxOffX+crossW/2, boxOffY, DOTTED, FORCE)
+  -- Numbers for pitch and roll
+  lcd.drawNumber(centerX-6, origY, Pitch, SMLSIZE)
+  lcd.drawNumber(origX,centerY-8,Roll,SMLSIZE)
 end
+
 
 
 ----------------------------------------------------------------------------------
@@ -350,7 +328,7 @@ local function draw5000()
   -- Page footer area (passthrough messages)
   lcd.drawFilledRectangle(0,57,212,7,INVERS)
   lcd.drawFilledRectangle(0,57,212,7)
-  lcd.drawText(0,57,SeverityMeaning[MsgSeverity]..MsgLastReceived,SMLSIZE)
+  lcd.drawText(0,57,((msgsRcvdPos+9-msgsDisplay)%10)..msgsRcvd[msgsDisplay],SMLSIZE)
   lcd.drawFilledRectangle(0,57,212,7,GREY(12))
 
   drawSection[0]=0
@@ -475,8 +453,11 @@ end
 
 local function draw5006()
   -- Left panel: PFD (Primary Flight Display)
-  clearRectangle(19,7,54,43)
-  drawArtificialHorizon(Roll*0.01745, Pitch*0.01745)   -- Roll, pitch (rads)
+  --clearRectangle(19,7,54,43)
+  --drawArtificialHorizon(Roll*0.01745, Pitch*0.01745)   -- Roll, pitch (rads)
+  --lcd.drawFilledRectangle(colAH-radAH-1, rowAH-radAH-1, radAH*2+2, radAH*2+2, ERASE)
+  --drawPitch()
+  drawHorizon()
 
   drawSection[6]=0
 end
@@ -623,7 +604,7 @@ local function run(e)
  
   -- Prepare to extract SPort data
   local sensorID,frameID,dataID,value = sportTelemetryPop()
---while dataID~=nil do
+  while dataID~=nil do
     -- unpack 0x5000  -- 32 bits. Sending 4 characters with 7 bits at a time. Msg sent 3 times.
     -- 0x5000         -- (I) 32 bits. Sending 4 characters with 7 bits at a time. Msg sent 3 times.
     --MsgSeverity=0     -- (I) 3 bits. Severity is sent as the MSB of each of the last three bytes of the last chunk (bits 24, 16, and 8) since a character is on 7 bits.
@@ -640,42 +621,53 @@ local function run(e)
       MsgByte2=bit32.extract(value,8,7)      --    bits 8 to 15
       MsgByte3=bit32.extract(value,16,7)     --    bits 16 to 23
       MsgByte4=bit32.extract(value,24,7)     -- For the MSB of the message, bits 24 to 31
+
+      -- Decode the 32 bits chunk, 4 bytes
       local MsgNewChunk=""
-      if MsgByte4~=0 then
+      if (MsgByte4~=0) then
         MsgNewChunk=string.char(MsgByte4)
       else
         MsgLastChunk=1
       end
-      if MsgByte3~=0 then
+      if (MsgByte3~=0) then
         MsgNewChunk=MsgNewChunk..string.char(MsgByte3)
       else
         MsgLastChunk=1
       end
-      if MsgByte2~=0 then
+      if (MsgByte2~=0) then
         MsgNewChunk=MsgNewChunk..string.char(MsgByte2)
       else
         MsgLastChunk=1
       end
-      if MsgByte1~=0 then
+      if (MsgByte1~=0) then
         MsgNewChunk=MsgNewChunk..string.char(MsgByte1)
       else
         MsgLastChunk=1
       end
 
-      if MsgPrevChunk~=MsgNewChunk then
+      -- If the new chunk is different from the last one and there is space, write
+      if (MsgPrevChunk~=MsgNewChunk and msgsChunksIndex<msgsChunksMax) then
         MsgText=MsgText..MsgNewChunk
         MsgPrevChunk=MsgNewChunk
-      end
-      if MsgLastChunk==1 then
-        MsgSeverity=(bit32.extract(value,23,1)*4)+(bit32.extract(value,15,1)*2)+bit32.extract(value,7,1)
-        MsgLastReceived=MsgText
-        MsgLastChunk=0
-        MsgText=""
-        MsgPrevChunk=""
+        msgsChunksIndex=msgsChunksIndex+1
       end
 
-      -- Draw received data
-      drawSection[0]=drawSection[0]+1
+      -- If end of message detected, get severity, store in buffer and increment index
+      if MsgLastChunk==1 then
+        if MsgText~="" then
+          MsgSeverity=(bit32.extract(value,23,1)*4)+(bit32.extract(value,15,1)*2)+bit32.extract(value,7,1)
+          msgsRcvd[msgsRcvdPos]=SeverityMeaning[MsgSeverity]..MsgText
+          msgsDisplay=msgsRcvdPos    -- This will set the display to the last received message (0)
+          msgsRcvdPos=(msgsRcvdPos+1)%10
+        end
+
+        MsgLastChunk=0
+        MsgText=""
+        msgsChunksIndex=0
+        -- Draw received data
+        drawSection[0]=drawSection[0]+1
+      end
+
     end
 
     -- unpack 0x5001 packet
@@ -743,7 +735,7 @@ local function run(e)
 
       -- Draw received data
       drawSection[6]=drawSection[6]+1
-      drawSection[5]=drawSection[5]+1
+      --drawSection[5]=drawSection[5]+1
     end
 
     -- unpack 0x5007 packet
@@ -775,9 +767,14 @@ local function run(e)
     end
 
     -- Check if there are messages in the queue to avoid exit from the while-do loop
---    sensorID,frameID,dataID,value = sportTelemetryPop()
---  end
-  queueTime = (queueTime*0.5)+((getTime()-runTime)*0.5)
+    sensorID,frameID,dataID,value = sportTelemetryPop()
+  end
+  queueTime = getTime()-runTime
+
+
+  -- Capture key press events
+  if (e==EVT_PLUS_FIRST) then msgsDisplay=(msgsDisplay+1)%10 end
+  if (e==EVT_MINUS_FIRST) then msgsDisplay=(msgsDisplay+9)%10 end
 
 
   -- If first called, wipe out the lcd
@@ -785,45 +782,46 @@ local function run(e)
    lcd.clear()
    drawLayout()
    screenCleared=1
-   draw5006()
-   draw5000()
+   --draw5000()
    draw5001()
    draw5002()
    draw5003()
    draw5004()
    draw5005()
+   draw5006()
    draw5007()
    drawUnder5000()
   end
 
   -- Adjust here the drawing priority
-  if drawSection[0]==drawPrio1 then draw5000() end
-  if drawSection[1]==drawPrio1 then draw5001() end
-  if drawSection[2]==drawPrio2 then draw5002() end
-  if drawSection[3]==drawPrio2 then draw5003() end
-  if drawSection[4]==drawPrio3 then draw5004() end
-  if drawSection[5]==drawPrio1 then draw5005() end
-  if drawSection[6]==drawPrio0 then draw5006() end
-  if drawSection[7]==drawPrio2 then draw5007() end
-  if drawSection[8]==drawPrio2 then drawUnder5000() end
+  if drawSection[0]>=drawPrio0 then draw5000() end
+  if drawSection[1]>=drawPrio0 then draw5001() end
+  if drawSection[2]>=drawPrio2 then draw5002() end
+  if drawSection[3]>=drawPrio2 then draw5003() end
+  if drawSection[4]>=drawPrio2 then draw5004() end
+  if drawSection[5]>=drawPrio1 then draw5005() end
+  if drawSection[6]>=drawPrio1 then draw5006() end
+  --draw5006()
+  if drawSection[7]>=drawPrio2 then draw5007() end
+  if drawSection[8]>=drawPrio2 then drawUnder5000() end
 
-  drawTime= (drawTime*0.5) + ((getTime()-runTime-queueTime)*0.5)
+  drawTime = getTime()-runTime
 
   -- Printing debugging info, use debugFeed() to move values in Companion simulator
-  --Roll=debugFeed()%10 + 70
-  --Pitch=debugFeed()
+  --Roll=debugFeed()%15
+  --Pitch=debugFeed()%15
   --GPSAlt=debugFeed()*10
   --SpdHor=debugFeed()*15
   --HomeAngle=debugFeed()*6
-  --draw5004()
   --draw5005()
   --draw5005()
+
   
-  totalTime= (totalTime*0.9) + ((getTime()-runTime)*0.1)
+  --totalTime= (totalTime*0.9) + ((getTime()-runTime)*0.1)
   -- Print exec time (for debugging)
-  lcd.drawNumber(212,30,queueTime,SMLSIZE+RIGHT)
-  lcd.drawNumber(212,40,drawTime,SMLSIZE+RIGHT)
-  lcd.drawNumber(212,50,totalTime,SMLSIZE+RIGHT)
+  --lcd.drawNumber(212,30,queueTime,SMLSIZE+RIGHT)
+  --lcd.drawNumber(212,40,drawTime,SMLSIZE+RIGHT)
+  --lcd.drawNumber(212,50,totalTime,SMLSIZE+RIGHT)
 end
 
 return{run=run, init=init_func}
