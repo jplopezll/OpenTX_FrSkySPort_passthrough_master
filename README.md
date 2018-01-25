@@ -4,9 +4,9 @@
 
 FrSky passthrough protocol to show telemetry data on a Taranis X9D+. It requires OpenTX 2.2. Use the script "spptel.lua".
 
-This version is fully functional, some functionalities (orientation and distances from home) to be verified on the field. Testers are wellcome! Do not hesitate to contact me in case of any doubt.
+This version is fully functional, some functionalities (orientation and distances from home) to be verified on the field. Testers are welcome! Do not hesitate to contact me in case of any doubt.
 
-Most of the data on the display is self explanatory, as you will see in the screenshot taken from OpenTX Companion simulator. The picture is just to show some data, it is not real.
+Most of the data on the display is self explanatory, as you will see in the screenshot taken from OpenTX Companion simulator. The picture shows icons and info that could show depending on data received.
 
 ![alt text](https://github.com/jplopezll/OpenTX_FrSkySPort_passthrough_0.0.1-dev/blob/master/images/layoutv002.png "Telemetry screen layout.")
 
@@ -24,9 +24,9 @@ E. Some gauges: RSSI, UAV battery status and current, TX battery remaining (I am
 
 F. GPS status and number of satellites.
 
-G. Angle from home launch (this is still to be checked on the field).
+G. Angle from home launch (field test pending).
 
-H. Distance from home launch (horizontal and vertical, also to be checked on the field).
+H. Distance from home launch (horizontal and vertical, field test pending).
 
 I. Status flags: armed, battery FS, landed, EKF FS. Also info on UAV battery voltage and capacity to FS trigger.
 
