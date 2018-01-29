@@ -4,7 +4,7 @@
 
 FrSky passthrough protocol to show telemetry data on a Taranis X9D+. It requires OpenTX 2.2. Use the script "spptel.lua".
 
-This version is fully functional, some functionalities (orientation and distances from home) to be verified on the field. Testers are welcome! Do not hesitate to contact me in case of any doubt.
+This version is fully functional, some functionalities (orientation and distances from home) to be verified on the field. Testers are welcome! Do not hesitate to contact me in case of any doubt. Details on the protocol and circuitry can be found [in the wiki](https://github.com/jplopezll/OpenTX_FrSkySPort_passthrough_master/wiki). 
 
 Most of the data on the display is self explanatory, as you will see in the screenshot taken from OpenTX Companion simulator. The picture shows icons and info that could show depending on data received.
 
@@ -36,6 +36,8 @@ I. Status flags: armed, battery FS, landed, EKF FS. Also info on UAV battery vol
 I am using a Pixhawk clone v2.4.8 with uBlock GPS module attached linked to a FrSky R-XSR using serial4 with protocol 10 (FrSky passthrough) activated via Mission Planner.
 
 To connect the serial 4 to the R-XSR you need a TTL-Serial inverter adaptor. I am using a protoboard with a MAX232N, four 1uF capacitors and a diode. I have also done some testing with a circuit based on optocouplers, some resistors and a diode (this also worked well).
+
+Full details on the wiki of this project: <https://github.com/jplopezll/OpenTX_FrSkySPort_passthrough_master/wiki>.
 
 I will be running the quad with a specific adaptor. You have a nice picture on the required adaptor on this thread <https://github.com/athertop/MavLink_FrSkySPort/issues/11>. Please note the diode that you need to place from TX comming from serial 4 to the S.Port on the R-XSR to block current from the S.Port to the TX pin.
 
